@@ -1,89 +1,23 @@
+/* eslint-disable no-console */
 
 const express = require('express')
 const moment = require('moment')
 const PDFParser = require('pdf2json')
+const { fetch } = require('./fetchPdf')
 
 let pdfParser = new PDFParser()
 let month = ''
-pdfParser.on("pdfParser_dataError", errData => console.error(errData.parserError))
-pdfParser.on("pdfParser_dataReady", pdfData => {
+pdfParser.on('pdfParser_dataError', errData => console.error(errData.parserError))
+pdfParser.on('pdfParser_dataReady', pdfData => {
 	let w1 = parseMenu(pdfData.formImage.Pages[0].Texts)
 	let w2 = parseMenu(pdfData.formImage.Pages[1].Texts)
 	let w3 = parseMenu(pdfData.formImage.Pages[2].Texts)
 	let w4 = parseMenu(pdfData.formImage.Pages[3].Texts)
-	month = JSON.stringify(Object.assign({}, w1, w2, w3, w4))
+	let w5 = (pdfData.formImage.Pages.length > 4) ? parseMenu(pdfData.formImage.Pages[4].Texts) : {}
+	month = JSON.stringify(Object.assign({}, w1, w2, w3, w4, w5))
 })
-const linkToOperaUni="https://www.operauni.tn.it/servizi/ristorazione/menu"
 
-const $ = require('cheerio');
- const rp= require('request-promise')
- const fs=require('fs')
-
- //Obtain PDF's URL.
-rp(linkToOperaUni).then(function(html){
-		//linkgetter
-		const pastoUrls = [];
-		//pastoUrls[0] will be completo
-		//pastoUrls[1] will be lesto.
-		for (let i = 0; i < 2; i++) {// I only care about the first 2 links.
-		 pastoUrls.push($('h4 > a', html)[i].attribs.href);//getting HREF VALUE
-		 //only for <a> tags inside h4
-	 	}
-		//downloader
-		const optionsLesto = {
-		 uri: pastoUrls[1],
-		 method: "GET",
-		 encoding: "binary",
-		 headers: {
-			 "Content-type": "applcation/pdf"
-		 }
-	 };
-	 const optionsCompleto = {
-		uri: pastoUrls[0],
-		method: "GET",
-		encoding: "binary",
-		headers: {
-			"Content-type": "applcation/pdf"
-		}
-	};
-	 //getFileLesto
-		rp(optionsLesto)
-		.then(function(body, data) {
-			let writeStream = fs.createWriteStream('/tmp/lesto.pdf');
-				writeStream.write(body, 'binary');
-				writeStream.on('finish', () => {
-				pdfParser.loadPDF('/tmp/lesto.pdf')
-				console.log('[Lesto]parsed data to file.');
-			});
-			writeStream.end();
-		}).catch(function (err) {
-					 throw err;
-			 });
-
-			 //getFileCompleto
-				rp(optionsCompleto)
-				.then(function(body, data) {
-					let writeStream = fs.createWriteStream('/tmp/completo.pdf');
-						writeStream.write(body, 'binary');
-						writeStream.on('finish', () => {
-						//pdfParser.loadPDF('/tmp/completo.pdf')
-						console.log('[Completo]parsed data to file.');
-					});
-					writeStream.end();
-				}).catch(function (err) {
-							 throw err;
-					 });
-	 //end get file.
-
-  })
-  .catch(function(err){
-    throw err;
-  });
-
-
-
-
-
+fetch(pdfParser)
 
 let app = express()
 app.get('/', function (req, res) {
@@ -92,7 +26,7 @@ app.get('/', function (req, res) {
 	res.send(month)
 })
 
-var parseMenu = function (texts) {
+const parseMenu = function (texts) {
 	let days = []
 	let daysLabels = []
 	try {
@@ -101,14 +35,18 @@ var parseMenu = function (texts) {
 			let str = decodeURI(el.R[0].T).trim().replace('%2C', '').replace('*', '')
 			if (str === 'LEGENDA')
 				throw 'shit'
-			if (i > 10 && str.length > 6 && str !== 'KCAL' && isNaN(str)) {
-				if (prev === i - 1) {
-					let m = days[Math.floor(j / 5)].menu
-					days[Math.floor(j / 5)].menu[m.length - 1] += ' ' + str
+			//da i > 10 iniziano i menu
+			if (i > 10 && str !== 'KCAL' && isNaN(str) && str.indexOf('%2') === -1) {
+				let row = Math.floor(j / 5)
+				if (prev === i - 1 && days[row] && days[row].menu) {
+					//qui dentro provo ad attaccare le cose che vanno a capo
+					let m = days[row].menu
+					if (str.indexOf('%') === -1) //if str do not has % in it
+						days[row].menu[m.length - 1] += ' ' + str
 					return
 				}
-				if (days[Math.floor(j / 5)])
-					days[Math.floor(j / 5)].menu.push(str)
+				if (days[row])
+					days[row].menu.push(str)
 				else
 					days.push({ menu: [str] })
 				j++
@@ -134,5 +72,5 @@ var parseMenu = function (texts) {
 	return menus
 }
 
-app.listen(process.env.PORT || 80)
-console.log("http://localhost:80")
+app.listen(process.env.PORT || 8080)
+console.log('http://localhost:8080')
